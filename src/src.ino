@@ -1,3 +1,5 @@
+// Acknowledgements: Based on Brett Beauregard's PID library after I could not get it working.
+
 #include <HCSR04.h>
 #include <Servo.h>
 #include <PID_v1.h>
@@ -11,14 +13,15 @@
 // Variables
 double r, y, e, x; 
 double eInt = 0, eDiff = 0, ePrev = 0;
-static double minOutput = -20, maxOutput = 20;
+static double integralMaxWindup = 80;
+static double maxOutput = 20;
 static int nominalActuatorAngle = 95; //degrees
 double Kp = -1.1, Ki = -0.3, Kd = 0;
 unsigned long currentTime, lastTime = 0;
-static unsigned long sampleTime = 8; //ms
+static unsigned long sampleTime = 10; //ms
 
 // HCSR04 Operations Manual recommends at least a 60ms measurement cycle, which translates to ~16Hz. 
-// However, because this application is at maximum 25cm = 1.45ms, estimate worst case 35ms which gets us to ~28Hz
+// However, because this application is at maximum 25cm = 1.45ms, we'll be able to get away with less.
 
 // Objects
 RunningAverage LowPassYFilter(5);
@@ -45,7 +48,7 @@ void loop() {
   }
   //Serial.println(deltaTime);
 
-  //LowPassRFilter.addValue(Sensors.dist(0));
+  // LowPassRFilter.addValue(Sensors.dist(0));
   LowPassYFilter.addValue(Sensors.dist(1));
   // r = LowPassRFilter.getAverage();
   y = LowPassYFilter.getAverage();
@@ -53,26 +56,17 @@ void loop() {
   e = r - y;
   eInt += e*(deltaTime/1000);
   // Anti-windup
-  if(eInt < -80){
-    eInt = -80;
-  }
-  else if(eInt > 80 ){
-    eInt = 80;
-  }
-  //Serial.println(eInt);
+  eInt = constrain(eInt,-integralMaxWindup,integralMaxWindup);
+  // Serial.println(eInt);
   eDiff = (e - ePrev)/(deltaTime/1000);
-  // Serial.println(deltaTime);
   // Serial.println(eDiff);
 
   x = (Kp*e + Ki*eInt + Kd*eDiff);
-  // Serial.println(x);
-  if(x < minOutput){
-    x = minOutput;
-  }
-  else if(x > maxOutput){
-    x = maxOutput;
-  }
-  
+
+  // Clamp the outputs
+  x = constrain(x,-maxOutput,maxOutput);
+
+  // Remember these for the next loop
   ePrev = e;
   lastTime = currentTime;
 
